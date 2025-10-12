@@ -8,12 +8,12 @@ const_175870806160890000 ==
 
 \* CONSTANT definitions @modelParameterConstants:1NumShips
 const_175870806160891000 == 
-3
+2
 ----
 
 \* CONSTANT definitions @modelParameterConstants:2NumLocks
 const_175870806160892000 == 
-2
+3
 ----
 
 \* CONSTANT definitions @modelParameterConstants:3MaxShipsLock

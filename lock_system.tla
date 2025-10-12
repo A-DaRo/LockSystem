@@ -2,8 +2,8 @@
 
 \* Enable depending on model to check
 
-EXTENDS lock_single
-\*EXTENDS lock_multiple
+\*EXTENDS lock_single
+EXTENDS lock_multiple
 
 =============================================================================
 \* Modification History
