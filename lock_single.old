@@ -333,7 +333,7 @@ end process;
 end algorithm; *)
 
 
-\* BEGIN TRANSLATION (chksum(pcal) = "7d9a9839" /\ chksum(tla) = "f1f81708")
+\* BEGIN TRANSLATION (chksum(pcal) = "8f58e95f" /\ chksum(tla) = "876ca390")
 VARIABLES lockOrientation, doorsOpen, valvesOpen, waterLevel, shipLocation, 
           shipStatus, lockCommand, requests, permissions, pc
 
@@ -409,7 +409,7 @@ vars == << lockOrientation, doorsOpen, valvesOpen, waterLevel, shipLocation,
 ProcSet == (Locks) \cup (Ships) \cup {0}
 
 Init == (* Global variables *)
-        /\ lockOrientation = "west_low"
+        /\ lockOrientation = "east_low"
         /\ doorsOpen = [ls \in LockSide |-> FALSE]
         /\ valvesOpen = [vs \in ValveSide |-> FALSE]
         /\ waterLevel = "low"

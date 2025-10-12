@@ -242,7 +242,22 @@ end process;
 process controlProcess = 0
 begin
   ControlStart:
-    \* Implement behaviour
+    \* Suggested controller skeleton (labels only, fill in logic):
+    \* ControlLoop:
+    \*   while TRUE do
+    \*     ControlReadRequest:
+    \*       read(requests, req);
+    \*     ControlCheckCapacity:
+    \*       \* ensure next location capacity OK (MaxShipsLocation/MaxShipsLock)
+    \*     ControlPrepareLock:
+    \*       \* use lockCommand[req.lock] to close doors and set valves; wait via labels for waterLevel[req.lock]
+    \*     ControlOpenDoor:
+    \*       \* open requested door for lock req.lock
+    \*     ControlReply:
+    \*       write(permissions[req.ship], [lock |-> req.lock, granted |-> BOOLEAN]);
+    \*     ControlObserveMove:
+    \*       \* if granted, observe moved[req.ship] and clear it
+    \*   end while;
     skip;
     
 end process;
