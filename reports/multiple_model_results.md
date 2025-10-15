@@ -8,35 +8,35 @@
 - Initial ship locations: [4 -> 0, 5 -> 6]
 
 ### Results Summary
-- **Deadlock: âœ… PASS** (No deadlock found)
+- **Deadlock: PASS** (No deadlock found)
 - **States explored:** 231,136 generated / 119,363 distinct
 - **Verification time:** 1 second
 - **Max depth:** 898 steps
 
 ### Invariants (Safety Properties)
-- **TypeOK:** âœ… PASS - All variables maintain correct types
-- **MessagesOK:** âœ… PASS - Message queues remain bounded
-- **DoorsMutex (âˆ€ l):** âœ… PASS - West and east doors never simultaneously open
-- **DoorsOpenValvesClosed (âˆ€ l):** âœ… PASS - Valves closed when opposite doors open
-- **DoorsOpenWaterlevelRight (âˆ€ l):** âœ… PASS - Doors open only at correct water level
-- **MaxShipsPerLocation (âˆ€ locations):** âœ… PASS - Capacity constraints enforced
+- **TypeOK:** PASS - All variables maintain correct types
+- **MessagesOK:** PASS - Message queues remain bounded
+- **DoorsMutex:** PASS - West and east doors never simultaneously open
+- **DoorsOpenValvesClosed:** PASS - Valves closed when opposite doors open
+- **DoorsOpenWaterlevelRight:** PASS - Doors open only at correct water level
+- **MaxShipsPerLocation:** PASS - Capacity constraints enforced
 
 ### Liveness Properties (Temporal)
 **Note:** Liveness properties were tested WITHOUT fairness assumptions
 
-- **RequestLockFulfilled (âˆ€ ships):** âš ï¸ FAIL (Requires Weak Fairness)
+- **RequestLockFulfilled:**FAIL (Requires Weak Fairness)
   - **Counterexample:** System enters stuttering where controller waits indefinitely at water level adjustment
   - **Fairness needed:** WF_vars(controlProcess), WF_vars(lockProcess), WF_vars(shipProcess)
   
-- **WaterLevelChange (âˆ€ locks):** âš ï¸ FAIL (Requires Weak Fairness)
+- **WaterLevelChange:** FAIL (Requires Weak Fairness)
   - **Counterexample:** Water level can remain constant indefinitely through stuttering
   - **Fairness needed:** WF_vars(lockProcess)
   
-- **RequestsShips (âˆ€ ships):** âš ï¸ FAIL (Requires Weak Fairness)
+- **RequestsShips:** FAIL (Requires Weak Fairness)
   - **Counterexample:** Ships can stop making requests through stuttering
   - **Fairness needed:** WF_vars(shipProcess)
   
-- **ShipsReachGoals (âˆ€ ships):** âš ï¸ FAIL (Requires Weak Fairness)
+- **ShipsReachGoals:** FAIL (Requires Weak Fairness)
   - **Counterexample:** Ships never complete full traversal through stuttering
   - **Fairness needed:** WF_vars(controlProcess), WF_vars(shipProcess)
 
@@ -68,7 +68,7 @@ FairSpec == Spec /\ WF_vars(controlProcess)
 
 ---
 
-## Test Configuration: 4 Locks, 2 Ships â€” 2025-10-12 â€” model_multiple/MC.cfg
+## Test Configuration: 4 Locks, 2 Ships 2025-10-12 model_multiple/MC.cfg
 
 ### Configuration
 - Constants: NumLocks=4, NumShips=2, MaxShipsLocation=2, MaxShipsLock=1
@@ -76,13 +76,13 @@ FairSpec == Spec /\ WF_vars(controlProcess)
 - Initial ship locations: [5 -> 0, 6 -> 8]
 
 ### Results Summary
-- **Deadlock: âœ… PASS** (No deadlock found)
+- **Deadlock: PASS** (No deadlock found)
 - **States explored:** 441,020 generated / 230,335 distinct
 - **Verification time:** 2 seconds
 - **Max depth:** 1,193 steps
 
 ### Invariants (Safety Properties)
-All invariants âœ… PASS (same as 3 locks configuration)
+All invariants PASS (same as 3 locks configuration)
 
 ---
 
@@ -91,10 +91,10 @@ All invariants âœ… PASS (same as 3 locks configuration)
 ### Tested Configurations
 | Locks | Ships | Result | Time | States (Distinct) |
 |-------|-------|--------|------|-------------------|
-| 3 | 2 | âœ… No Deadlock | 1s | 119,363 |
-| 4 | 2 | âœ… No Deadlock | 2s | 230,335 |
-| 2 | 3 | â³ Testing | >3min | >726,000+ |
-| 3 | 3 | â³ Testing | >3min | >637,000+ |
+| 3 | 2 | No Deadlock | 1s | 119,363 |
+| 4 | 2 | No Deadlock | 2s | 230,335 |
+| 2 | 3 | Testing | >3min | >726,000+ |
+| 3 | 3 | Testing | >3min | >637,000+ |
 
 ### Minimum Configuration for Deadlock
 
@@ -110,22 +110,22 @@ All invariants âœ… PASS (same as 3 locks configuration)
 
 **Deadlock Sequence:**
 ```
-1. Ship A requests Lock 1 west â†’ Granted â†’ Moves to location 1
-2. Ship C requests Lock 2 east â†’ Granted â†’ Moves to location 3
-3. Ship A requests Lock 1 east (to exit) â†’ Controller processing
-4. Ship C requests Lock 2 west (to exit) â†’ Controller processing
-5. Ship B at location 2 requests Lock 1 west â†’ Denied (Ship A still in Lock 1)
+1. Ship A requests Lock 1 west -> Granted Moves to location 1
+2. Ship C requests Lock 2 east -> Granted Moves to location 3
+3. Ship A requests Lock 1 east (to exit) -> Controller processing
+4. Ship C requests Lock 2 west (to exit) -> Controller processing
+5. Ship B at location 2 requests Lock 1 west -> Denied (Ship A still in Lock 1)
 
 Deadlock State:
 - Ship A in Lock 1 (location 1), wants to exit to location 2
-  â†’ Cannot exit: Location 2 at capacity (Ship B present)
+  -> Cannot exit: Location 2 at capacity (Ship B present)
 - Ship C in Lock 2 (location 3), wants to exit to location 2
-  â†’ Cannot exit: Location 2 at capacity (Ship B present)
+  -> Cannot exit: Location 2 at capacity (Ship B present)
 - Ship B at location 2, wants to enter Lock 1
-  â†’ Cannot enter: Lock 1 at capacity (Ship A still there)
+  -> Cannot enter: Lock 1 at capacity (Ship A still there)
   
 Circular Dependency:
-A waits for B to move â†’ B waits for A to exit â†’ C waits for B to move â†’ All blocked
+A waits for B to move -> B waits for A to exit -> C waits for B to move -> All blocked
 ```
 
 **Note:** Due to state space explosion (>700K states explored without completion), this scenario could not be verified within reasonable time. The circular waiting condition suggests deadlock is possible with 3+ ships.
@@ -235,7 +235,7 @@ FairSpec == Spec
 - Total verification time: 14 seconds
 - Max depth: 898 steps
 
-### Result: ❌ **LIVENESS PROPERTIES VIOLATED**
+### Result: **LIVENESS PROPERTIES VIOLATED**
 
 **TLC Error:** "Temporal properties were violated."
 
@@ -269,7 +269,7 @@ waterLevel = <<"low", "high", "high">>
 
 ### Property Evaluation with Fairness
 
-#### ❌ RequestLockFulfilled
+#### RequestLockFulfilled
 **Formula:**
 ```tla
 RequestLockFulfilled == \A s \in Ships: 
@@ -284,7 +284,7 @@ RequestLockFulfilled == \A s \in Ships:
 
 ---
 
-#### ❌ WaterlevelChange
+#### WaterlevelChange
 **Formula:**
 ```tla
 WaterlevelChange == \A l \in Locks: 
@@ -299,7 +299,7 @@ WaterlevelChange == \A l \in Locks:
 
 ---
 
-#### ❌ RequestsShips
+#### RequestsShips
 **Formula:**
 ```tla
 RequestsShips == \A s \in Ships: 
@@ -314,7 +314,7 @@ RequestsShips == \A s \in Ships:
 
 ---
 
-#### ❌ ShipsReachGoals
+#### ShipsReachGoals
 **Formula:**
 ```tla
 ShipsReachGoals == \A s \in Ships: 
@@ -384,16 +384,16 @@ ControlCheckCapacity:
 
 ## Final Summary
 
-### Invariants (Safety): ✅ ALL PASS
+### Invariants (Safety): ALL PASS
 - TypeOK, MessagesOK, DoorsMutex, DoorsOpenValvesClosed, DoorsOpenWaterlevelRight, MaxShipsPerLocation
 
-### Liveness Properties: ❌ ALL FAIL (with weak fairness)
+### Liveness Properties: ALL FAIL (with weak fairness)
 - **RequestLockFulfilled:** FALSE (capacity deadlock prevents ships from entering locks)
 - **WaterlevelChange:** FALSE (lock 2 stuck at "high" water level)
 - **RequestsShips:** FALSE (ships stuck waiting, cannot make new requests infinitely often)
 - **ShipsReachGoals:** FALSE (ships never complete full traversal cycles)
 
-### Deadlock Status: ✅ No TLC-detected deadlock
+### Deadlock Status: No TLC-detected deadlock
 **However:** Liveness failure indicates a **livelock** (system can transition but makes no progress)
 
 ### State Space:
@@ -402,10 +402,3 @@ ControlCheckCapacity:
 
 ### Fairness Assessment:
 **Weak fairness is insufficient** to guarantee liveness under capacity constraints. The model requires algorithmic improvements to the controller's decision logic to prevent capacity-induced deadlocks.
-
-### Recommended Next Steps:
-1. **Modify capacity checking:** Add logic to prioritize exit requests over entry requests
-2. **Implement deadlock detection:** Controller predicts circular waiting before granting
-3. **Test with relaxed capacity:** Try `MaxShipsLock=2` to see if liveness becomes satisfiable
-4. **Consider strong fairness:** Test if SF helps (unlikely, but worth verifying)
-5. **Document design limitation:** Acknowledge that current strategy cannot guarantee liveness with realistic capacity constraints

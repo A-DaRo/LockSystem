@@ -1,5 +1,3 @@
----
-
 ## Liveness Verification WITH Weak Fairness
 
 ### Configuration: 3 Locks, 2 Ships with FairSpec
@@ -27,7 +25,7 @@ FairSpec == Spec
 - Total verification time: 14 seconds
 - Max depth: 898 steps
 
-### Result: ❌ **LIVENESS PROPERTIES VIOLATED**
+### Result: **LIVENESS PROPERTIES VIOLATED**
 
 **TLC Error:** "Temporal properties were violated."
 
@@ -61,7 +59,7 @@ waterLevel = <<"low", "high", "high">>
 
 ### Property Evaluation with Fairness
 
-#### ❌ RequestLockFulfilled
+#### RequestLockFulfilled
 **Formula:**
 ```tla
 RequestLockFulfilled == \A s \in Ships: 
@@ -76,7 +74,7 @@ RequestLockFulfilled == \A s \in Ships:
 
 ---
 
-#### ❌ WaterlevelChange
+#### WaterlevelChange
 **Formula:**
 ```tla
 WaterlevelChange == \A l \in Locks: 
@@ -91,7 +89,7 @@ WaterlevelChange == \A l \in Locks:
 
 ---
 
-#### ❌ RequestsShips
+#### RequestsShips
 **Formula:**
 ```tla
 RequestsShips == \A s \in Ships: 
@@ -106,7 +104,7 @@ RequestsShips == \A s \in Ships:
 
 ---
 
-#### ❌ ShipsReachGoals
+#### ShipsReachGoals
 **Formula:**
 ```tla
 ShipsReachGoals == \A s \in Ships: 
@@ -176,16 +174,16 @@ ControlCheckCapacity:
 
 ## Final Summary
 
-### Invariants (Safety): ✅ ALL PASS
+### Invariants (Safety): ALL PASS
 - TypeOK, MessagesOK, DoorsMutex, DoorsOpenValvesClosed, DoorsOpenWaterlevelRight, MaxShipsPerLocation
 
-### Liveness Properties: ❌ ALL FAIL (with weak fairness)
+### Liveness Properties: ALL FAIL (with weak fairness)
 - **RequestLockFulfilled:** FALSE (capacity deadlock prevents ships from entering locks)
 - **WaterlevelChange:** FALSE (lock 2 stuck at "high" water level)
 - **RequestsShips:** FALSE (ships stuck waiting, cannot make new requests infinitely often)
 - **ShipsReachGoals:** FALSE (ships never complete full traversal cycles)
 
-### Deadlock Status: ✅ No TLC-detected deadlock
+### Deadlock Status: No TLC-detected deadlock
 **However:** Liveness failure indicates a **livelock** (system can transition but makes no progress)
 
 ### State Space:

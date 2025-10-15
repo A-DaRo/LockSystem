@@ -10,10 +10,10 @@
 
 | Property | Result | Reason |
 |----------|---------|---------|
-| **RequestLockFulfilled** | ❌ **FALSE** | Capacity deadlock - ships denied access perpetually |
-| **WaterlevelChange** | ❌ **FALSE** | Lock 2 stuck at "high" due to ship deadlock |
-| **RequestsShips** | ❌ **FALSE** | Ships stuck waiting, cannot make new requests |
-| **ShipsReachGoals** | ❌ **FALSE** | Ships never complete full traversal cycles |
+| **RequestLockFulfilled** |  **FALSE** | Capacity deadlock - ships denied access perpetually |
+| **WaterlevelChange** | **FALSE** | Lock 2 stuck at "high" due to ship deadlock |
+| **RequestsShips** | **FALSE** | Ships stuck waiting, cannot make new requests |
+| **ShipsReachGoals** |  **FALSE** | Ships never complete full traversal cycles |
 
 **All 4 liveness properties FAIL even with weak fairness.**
 
@@ -172,10 +172,10 @@ FairSpec == Spec
 
 ## Final Verdict
 
-✅ **Safety Properties:** All 6 invariants PASS  
-❌ **Liveness Properties:** All 4 properties FAIL (with weak fairness)  
-✅ **Deadlock (TLC):** No deadlock detected  
-⚠️ **Livelock:** Present - system can transition but makes no progress  
+**Safety Properties:** All 6 invariants PASS  
+**Liveness Properties:** All 4 properties FAIL (with weak fairness)  
+**Deadlock (TLC):** No deadlock detected  
+**Livelock:** Present - system can transition but makes no progress  
 
 **Model Status:** Safety-correct but liveness-incorrect under realistic capacity constraints.
 

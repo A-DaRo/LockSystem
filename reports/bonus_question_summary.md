@@ -21,7 +21,7 @@ Added to `lock_multiple.tla` and checked as an **INVARIANT**.
 
 ---
 
-## TLC Result: ✅ **PROPERTY VIOLATED**
+## TLC Result: **PROPERTY VIOLATED**
 
 **Meaning:** TLC found a state where ALL ships have `goal_reached` status!
 
@@ -88,7 +88,7 @@ Phase 2 (States ~151-358):
 
 ---
 
-## Length: 358 Steps - Why So Long?
+## Length: 358 Steps
 
 The counterexample is **very long** because:
 
