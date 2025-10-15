@@ -278,6 +278,8 @@ variables
   targetLocation = 0;
   canGrant = TRUE;
   shipsAtTarget = 0;
+  isExitRequest = FALSE;
+  requeueCount = 0;
 begin
   ControlLoop:
     while TRUE do
@@ -288,9 +290,10 @@ begin
         oppositeSide := IF requestedSide = "west" THEN "east" ELSE "west";
         
       ControlCheckCapacity:
-        \* Determine target location for the ship
+        \* Determine target location for the ship and whether this is an exit request
         if InLock(req.ship) then
-          \* Ship is inside lock, wants to exit
+          \* Ship is inside lock, wants to exit - THIS HAS PRIORITY
+          isExitRequest := TRUE;
           if requestedSide = "west" then
             targetLocation := shipLocations[req.ship] - 1;
           else
@@ -298,6 +301,7 @@ begin
           end if;
         else
           \* Ship is outside lock, wants to enter
+          isExitRequest := FALSE;
           if requestedSide = "west" then
             targetLocation := shipLocations[req.ship] + 1;
           else
@@ -308,18 +312,33 @@ begin
         \* Count ships at target location
         shipsAtTarget := Cardinality({s \in Ships : shipLocations[s] = targetLocation});
         
-        \* Check capacity constraints
+        \* Check capacity constraints with priority for exit requests
+        \* KEY INSIGHT: Exit requests get priority by allowing them even if at capacity,
+        \* because deadlock prevention requires ships to be able to leave locks
         if IsLock(targetLocation) then
           \* Target is inside a lock
-          canGrant := shipsAtTarget < MaxShipsLock;
+          if isExitRequest then
+            \* EXIT requests: Always allow to prevent deadlock (relaxed capacity)
+            canGrant := TRUE;
+          else
+            \* ENTRY requests: Strict capacity check
+            canGrant := shipsAtTarget < MaxShipsLock;
+          end if;
         else
           \* Target is outside a lock
-          canGrant := shipsAtTarget < MaxShipsLocation;
+          if isExitRequest then
+            \* EXIT from lock to outside: Allow with relaxed capacity
+            canGrant := shipsAtTarget < MaxShipsLocation + 1;
+          else
+            \* ENTRY from outside: Strict capacity
+            canGrant := shipsAtTarget < MaxShipsLocation;
+          end if;
         end if;
         
       ControlDecideGrant:
         if ~canGrant then
-          \* Deny permission due to capacity
+          \* Capacity exceeded - deny request
+          \* Entry requests will be denied and ship retries, giving exits natural priority
       ControlDenyPermission:
           write(permissions[req.ship], [lock |-> req.lock, granted |-> FALSE]);
         else
@@ -493,12 +512,12 @@ MaxShipsPerLocation == \A loc \in Locations:
 AllShipsCannotReachGoal == ~(\A s \in Ships: shipStates[s] = "goal_reached")
 
 VARIABLES perm, req, targetWaterLevel, requestedSide, oppositeSide, 
-          targetLocation, canGrant, shipsAtTarget
+          targetLocation, canGrant, shipsAtTarget, isExitRequest, requeueCount
 
 vars == << lockOrientations, doorsOpen, valvesOpen, waterLevel, shipLocations, 
            shipStates, lockCommand, requests, permissions, moved, pc, perm, 
            req, targetWaterLevel, requestedSide, oppositeSide, targetLocation, 
-           canGrant, shipsAtTarget >>
+           canGrant, shipsAtTarget, isExitRequest, requeueCount >>
 
 ProcSet == (Locks) \cup (Ships) \cup {0}
 
@@ -523,6 +542,8 @@ Init == (* Global variables *)
         /\ targetLocation = 0
         /\ canGrant = TRUE
         /\ shipsAtTarget = 0
+        /\ isExitRequest = FALSE
+        /\ requeueCount = 0
         /\ pc = [self \in ProcSet |-> CASE self \in Locks -> "LockWaitForCommand"
                                         [] self \in Ships -> "ShipNextIteration"
                                         [] self = 0 -> "ControlLoop"]
@@ -545,7 +566,7 @@ LockWaitForCommand(self) == /\ pc[self] = "LockWaitForCommand"
                                             moved, perm, req, targetWaterLevel, 
                                             requestedSide, oppositeSide, 
                                             targetLocation, canGrant, 
-                                            shipsAtTarget >>
+                                            shipsAtTarget, isExitRequest, requeueCount >>
 
 LockUpdateWaterLevel(self) == /\ pc[self] = "LockUpdateWaterLevel"
                               /\ IF (valvesOpen[self])["low"]
@@ -568,7 +589,7 @@ LockUpdateWaterLevel(self) == /\ pc[self] = "LockUpdateWaterLevel"
                                               perm, req, targetWaterLevel, 
                                               requestedSide, oppositeSide, 
                                               targetLocation, canGrant, 
-                                              shipsAtTarget >>
+                                              shipsAtTarget, isExitRequest, requeueCount >>
 
 LockCommandFinished(self) == /\ pc[self] = "LockCommandFinished"
                              /\ lockCommand' = [lockCommand EXCEPT ![self].command = "finished"]
@@ -580,7 +601,7 @@ LockCommandFinished(self) == /\ pc[self] = "LockCommandFinished"
                                              perm, req, targetWaterLevel, 
                                              requestedSide, oppositeSide, 
                                              targetLocation, canGrant, 
-                                             shipsAtTarget >>
+                                             shipsAtTarget, isExitRequest, requeueCount >>
 
 lockProcess(self) == LockWaitForCommand(self) \/ LockUpdateWaterLevel(self)
                         \/ LockCommandFinished(self)
@@ -608,7 +629,7 @@ ShipNextIteration(self) == /\ pc[self] = "ShipNextIteration"
                                            moved, perm, req, targetWaterLevel, 
                                            requestedSide, oppositeSide, 
                                            targetLocation, canGrant, 
-                                           shipsAtTarget >>
+                                           shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipGoalReachedEast(self) == /\ pc[self] = "ShipGoalReachedEast"
                              /\ shipStates' = [shipStates EXCEPT ![self] = "goal_reached"]
@@ -620,7 +641,7 @@ ShipGoalReachedEast(self) == /\ pc[self] = "ShipGoalReachedEast"
                                              perm, req, targetWaterLevel, 
                                              requestedSide, oppositeSide, 
                                              targetLocation, canGrant, 
-                                             shipsAtTarget >>
+                                             shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipMoveEast(self) == /\ pc[self] = "ShipMoveEast"
                       /\ IF perm[self].granted
@@ -636,7 +657,7 @@ ShipMoveEast(self) == /\ pc[self] = "ShipMoveEast"
                                       requests, permissions, perm, req, 
                                       targetWaterLevel, requestedSide, 
                                       oppositeSide, targetLocation, canGrant, 
-                                      shipsAtTarget >>
+                                      shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipRequestWest(self) == /\ pc[self] = "ShipRequestWest"
                          /\ requests' = Append(requests, ([ship |-> self, lock |-> GetLock(shipLocations[self]+1), side |-> "west"]))
@@ -647,7 +668,7 @@ ShipRequestWest(self) == /\ pc[self] = "ShipRequestWest"
                                          moved, perm, req, targetWaterLevel, 
                                          requestedSide, oppositeSide, 
                                          targetLocation, canGrant, 
-                                         shipsAtTarget >>
+                                         shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipWaitForWest(self) == /\ pc[self] = "ShipWaitForWest"
                          /\ (permissions[self]) /= <<>>
@@ -662,7 +683,7 @@ ShipWaitForWest(self) == /\ pc[self] = "ShipWaitForWest"
                                          moved, req, targetWaterLevel, 
                                          requestedSide, oppositeSide, 
                                          targetLocation, canGrant, 
-                                         shipsAtTarget >>
+                                         shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipRequestEastInLock(self) == /\ pc[self] = "ShipRequestEastInLock"
                                /\ requests' = Append(requests, ([ship |-> self, lock |-> GetLock(shipLocations[self]), side |-> "east"]))
@@ -674,7 +695,7 @@ ShipRequestEastInLock(self) == /\ pc[self] = "ShipRequestEastInLock"
                                                perm, req, targetWaterLevel, 
                                                requestedSide, oppositeSide, 
                                                targetLocation, canGrant, 
-                                               shipsAtTarget >>
+                                               shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipWaitForEastInLock(self) == /\ pc[self] = "ShipWaitForEastInLock"
                                /\ (permissions[self]) /= <<>>
@@ -690,7 +711,7 @@ ShipWaitForEastInLock(self) == /\ pc[self] = "ShipWaitForEastInLock"
                                                req, targetWaterLevel, 
                                                requestedSide, oppositeSide, 
                                                targetLocation, canGrant, 
-                                               shipsAtTarget >>
+                                               shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipTurnAround(self) == /\ pc[self] = "ShipTurnAround"
                         /\ shipStates' = [shipStates EXCEPT ![self] = IF shipLocations[self] = WestEnd THEN "go_to_east" ELSE "go_to_west"]
@@ -701,7 +722,7 @@ ShipTurnAround(self) == /\ pc[self] = "ShipTurnAround"
                                         moved, perm, req, targetWaterLevel, 
                                         requestedSide, oppositeSide, 
                                         targetLocation, canGrant, 
-                                        shipsAtTarget >>
+                                        shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipGoalReachedWest(self) == /\ pc[self] = "ShipGoalReachedWest"
                              /\ shipStates' = [shipStates EXCEPT ![self] = "goal_reached"]
@@ -713,7 +734,7 @@ ShipGoalReachedWest(self) == /\ pc[self] = "ShipGoalReachedWest"
                                              perm, req, targetWaterLevel, 
                                              requestedSide, oppositeSide, 
                                              targetLocation, canGrant, 
-                                             shipsAtTarget >>
+                                             shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipMoveWest(self) == /\ pc[self] = "ShipMoveWest"
                       /\ IF perm[self].granted
@@ -729,7 +750,7 @@ ShipMoveWest(self) == /\ pc[self] = "ShipMoveWest"
                                       requests, permissions, perm, req, 
                                       targetWaterLevel, requestedSide, 
                                       oppositeSide, targetLocation, canGrant, 
-                                      shipsAtTarget >>
+                                      shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipRequestEast(self) == /\ pc[self] = "ShipRequestEast"
                          /\ requests' = Append(requests, ([ship |-> self, lock |-> GetLock(shipLocations[self]-1), side |-> "east"]))
@@ -740,7 +761,7 @@ ShipRequestEast(self) == /\ pc[self] = "ShipRequestEast"
                                          moved, perm, req, targetWaterLevel, 
                                          requestedSide, oppositeSide, 
                                          targetLocation, canGrant, 
-                                         shipsAtTarget >>
+                                         shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipWaitForEast(self) == /\ pc[self] = "ShipWaitForEast"
                          /\ (permissions[self]) /= <<>>
@@ -755,7 +776,7 @@ ShipWaitForEast(self) == /\ pc[self] = "ShipWaitForEast"
                                          moved, req, targetWaterLevel, 
                                          requestedSide, oppositeSide, 
                                          targetLocation, canGrant, 
-                                         shipsAtTarget >>
+                                         shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipRequestWestInLock(self) == /\ pc[self] = "ShipRequestWestInLock"
                                /\ requests' = Append(requests, ([ship |-> self, lock |-> GetLock(shipLocations[self]), side |-> "west"]))
@@ -767,7 +788,7 @@ ShipRequestWestInLock(self) == /\ pc[self] = "ShipRequestWestInLock"
                                                perm, req, targetWaterLevel, 
                                                requestedSide, oppositeSide, 
                                                targetLocation, canGrant, 
-                                               shipsAtTarget >>
+                                               shipsAtTarget, isExitRequest, requeueCount >>
 
 ShipWaitForWestInLock(self) == /\ pc[self] = "ShipWaitForWestInLock"
                                /\ (permissions[self]) /= <<>>
@@ -783,7 +804,7 @@ ShipWaitForWestInLock(self) == /\ pc[self] = "ShipWaitForWestInLock"
                                                req, targetWaterLevel, 
                                                requestedSide, oppositeSide, 
                                                targetLocation, canGrant, 
-                                               shipsAtTarget >>
+                                               shipsAtTarget, isExitRequest, requeueCount >>
 
 shipProcess(self) == ShipNextIteration(self) \/ ShipGoalReachedEast(self)
                         \/ ShipMoveEast(self) \/ ShipRequestWest(self)
@@ -803,7 +824,7 @@ ControlLoop == /\ pc[0] = "ControlLoop"
                                lockCommand, requests, permissions, moved, perm, 
                                req, targetWaterLevel, requestedSide, 
                                oppositeSide, targetLocation, canGrant, 
-                               shipsAtTarget >>
+                               shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlReadRequest == /\ pc[0] = "ControlReadRequest"
                       /\ requests /= <<>>
@@ -816,27 +837,34 @@ ControlReadRequest == /\ pc[0] = "ControlReadRequest"
                                       waterLevel, shipLocations, shipStates, 
                                       lockCommand, permissions, moved, perm, 
                                       targetWaterLevel, targetLocation, 
-                                      canGrant, shipsAtTarget >>
+                                      canGrant, shipsAtTarget, isExitRequest, 
+                                      requeueCount >>
 
 ControlCheckCapacity == /\ pc[0] = "ControlCheckCapacity"
                         /\ IF InLock(req.ship)
-                              THEN /\ IF requestedSide = "west"
+                              THEN /\ isExitRequest' = TRUE
+                                   /\ IF requestedSide = "west"
                                          THEN /\ targetLocation' = shipLocations[req.ship] - 1
                                          ELSE /\ targetLocation' = shipLocations[req.ship] + 1
-                              ELSE /\ IF requestedSide = "west"
+                              ELSE /\ isExitRequest' = FALSE
+                                   /\ IF requestedSide = "west"
                                          THEN /\ targetLocation' = shipLocations[req.ship] + 1
                                          ELSE /\ targetLocation' = shipLocations[req.ship] - 1
                         /\ shipsAtTarget' = Cardinality({s \in Ships : shipLocations[s] = targetLocation'})
                         /\ IF IsLock(targetLocation')
-                              THEN /\ canGrant' = (shipsAtTarget' < MaxShipsLock)
-                              ELSE /\ canGrant' = (shipsAtTarget' < MaxShipsLocation)
+                              THEN /\ IF isExitRequest'
+                                         THEN /\ canGrant' = TRUE
+                                         ELSE /\ canGrant' = (shipsAtTarget' < MaxShipsLock)
+                              ELSE /\ IF isExitRequest'
+                                         THEN /\ canGrant' = (shipsAtTarget' < MaxShipsLocation + 1)
+                                         ELSE /\ canGrant' = (shipsAtTarget' < MaxShipsLocation)
                         /\ pc' = [pc EXCEPT ![0] = "ControlDecideGrant"]
                         /\ UNCHANGED << lockOrientations, doorsOpen, 
                                         valvesOpen, waterLevel, shipLocations, 
                                         shipStates, lockCommand, requests, 
                                         permissions, moved, perm, req, 
                                         targetWaterLevel, requestedSide, 
-                                        oppositeSide >>
+                                        oppositeSide, requeueCount >>
 
 ControlDecideGrant == /\ pc[0] = "ControlDecideGrant"
                       /\ IF ~canGrant
@@ -847,7 +875,8 @@ ControlDecideGrant == /\ pc[0] = "ControlDecideGrant"
                                       lockCommand, requests, permissions, 
                                       moved, perm, req, targetWaterLevel, 
                                       requestedSide, oppositeSide, 
-                                      targetLocation, canGrant, shipsAtTarget >>
+                                      targetLocation, canGrant, shipsAtTarget, 
+                                      isExitRequest, requeueCount >>
 
 ControlDenyPermission == /\ pc[0] = "ControlDenyPermission"
                          /\ permissions' = [permissions EXCEPT ![req.ship] = Append((permissions[req.ship]), ([lock |-> req.lock, granted |-> FALSE]))]
@@ -858,7 +887,7 @@ ControlDenyPermission == /\ pc[0] = "ControlDenyPermission"
                                          moved, perm, req, targetWaterLevel, 
                                          requestedSide, oppositeSide, 
                                          targetLocation, canGrant, 
-                                         shipsAtTarget >>
+                                         shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlCloseDoors == /\ pc[0] = "ControlCloseDoors"
                      /\ IF doorsOpen[req.lock][requestedSide]
@@ -871,7 +900,7 @@ ControlCloseDoors == /\ pc[0] = "ControlCloseDoors"
                                      requests, permissions, moved, perm, req, 
                                      targetWaterLevel, requestedSide, 
                                      oppositeSide, targetLocation, canGrant, 
-                                     shipsAtTarget >>
+                                     shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlWaitCloseDoor1 == /\ pc[0] = "ControlWaitCloseDoor1"
                          /\ lockCommand[req.lock].command = "finished"
@@ -882,7 +911,7 @@ ControlWaitCloseDoor1 == /\ pc[0] = "ControlWaitCloseDoor1"
                                          permissions, moved, perm, req, 
                                          targetWaterLevel, requestedSide, 
                                          oppositeSide, targetLocation, 
-                                         canGrant, shipsAtTarget >>
+                                         canGrant, shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlCheckOppositeDoor == /\ pc[0] = "ControlCheckOppositeDoor"
                             /\ TRUE
@@ -894,7 +923,7 @@ ControlCheckOppositeDoor == /\ pc[0] = "ControlCheckOppositeDoor"
                                             moved, perm, req, targetWaterLevel, 
                                             requestedSide, oppositeSide, 
                                             targetLocation, canGrant, 
-                                            shipsAtTarget >>
+                                            shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlCloseDoor2 == /\ pc[0] = "ControlCloseDoor2"
                      /\ IF doorsOpen[req.lock][oppositeSide]
@@ -907,7 +936,7 @@ ControlCloseDoor2 == /\ pc[0] = "ControlCloseDoor2"
                                      requests, permissions, moved, perm, req, 
                                      targetWaterLevel, requestedSide, 
                                      oppositeSide, targetLocation, canGrant, 
-                                     shipsAtTarget >>
+                                     shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlWaitCloseDoor2 == /\ pc[0] = "ControlWaitCloseDoor2"
                          /\ lockCommand[req.lock].command = "finished"
@@ -918,7 +947,7 @@ ControlWaitCloseDoor2 == /\ pc[0] = "ControlWaitCloseDoor2"
                                          permissions, moved, perm, req, 
                                          targetWaterLevel, requestedSide, 
                                          oppositeSide, targetLocation, 
-                                         canGrant, shipsAtTarget >>
+                                         canGrant, shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlDetermineTargetLevel == /\ pc[0] = "ControlDetermineTargetLevel"
                                /\ TRUE
@@ -930,7 +959,7 @@ ControlDetermineTargetLevel == /\ pc[0] = "ControlDetermineTargetLevel"
                                                permissions, moved, perm, req, 
                                                targetWaterLevel, requestedSide, 
                                                oppositeSide, targetLocation, 
-                                               canGrant, shipsAtTarget >>
+                                               canGrant, shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlSetTargetLevel == /\ pc[0] = "ControlSetTargetLevel"
                          /\ IF requestedSide = LowSide(lockOrientations[req.lock])
@@ -943,7 +972,7 @@ ControlSetTargetLevel == /\ pc[0] = "ControlSetTargetLevel"
                                          permissions, moved, perm, req, 
                                          requestedSide, oppositeSide, 
                                          targetLocation, canGrant, 
-                                         shipsAtTarget >>
+                                         shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlAdjustWaterLevel == /\ pc[0] = "ControlAdjustWaterLevel"
                            /\ IF waterLevel[req.lock] /= targetWaterLevel
@@ -960,7 +989,7 @@ ControlAdjustWaterLevel == /\ pc[0] = "ControlAdjustWaterLevel"
                                            permissions, moved, perm, req, 
                                            targetWaterLevel, requestedSide, 
                                            oppositeSide, targetLocation, 
-                                           canGrant, shipsAtTarget >>
+                                           canGrant, shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlWaitValveLow == /\ pc[0] = "ControlWaitValveLow"
                        /\ lockCommand[req.lock].command = "finished"
@@ -970,7 +999,7 @@ ControlWaitValveLow == /\ pc[0] = "ControlWaitValveLow"
                                        lockCommand, requests, permissions, 
                                        moved, perm, req, targetWaterLevel, 
                                        requestedSide, oppositeSide, 
-                                       targetLocation, canGrant, shipsAtTarget >>
+                                       targetLocation, canGrant, shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlWaitWaterLow == /\ pc[0] = "ControlWaitWaterLow"
                        /\ waterLevel[req.lock] = "low"
@@ -981,7 +1010,7 @@ ControlWaitWaterLow == /\ pc[0] = "ControlWaitWaterLow"
                                        requests, permissions, moved, perm, req, 
                                        targetWaterLevel, requestedSide, 
                                        oppositeSide, targetLocation, canGrant, 
-                                       shipsAtTarget >>
+                                       shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlWaitCloseValveLow == /\ pc[0] = "ControlWaitCloseValveLow"
                             /\ lockCommand[req.lock].command = "finished"
@@ -993,7 +1022,7 @@ ControlWaitCloseValveLow == /\ pc[0] = "ControlWaitCloseValveLow"
                                             moved, perm, req, targetWaterLevel, 
                                             requestedSide, oppositeSide, 
                                             targetLocation, canGrant, 
-                                            shipsAtTarget >>
+                                            shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlPrepareOpenDoor1 == /\ pc[0] = "ControlPrepareOpenDoor1"
                            /\ TRUE
@@ -1005,7 +1034,7 @@ ControlPrepareOpenDoor1 == /\ pc[0] = "ControlPrepareOpenDoor1"
                                            moved, perm, req, targetWaterLevel, 
                                            requestedSide, oppositeSide, 
                                            targetLocation, canGrant, 
-                                           shipsAtTarget >>
+                                           shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlWaitValveHigh == /\ pc[0] = "ControlWaitValveHigh"
                         /\ lockCommand[req.lock].command = "finished"
@@ -1016,7 +1045,7 @@ ControlWaitValveHigh == /\ pc[0] = "ControlWaitValveHigh"
                                         permissions, moved, perm, req, 
                                         targetWaterLevel, requestedSide, 
                                         oppositeSide, targetLocation, canGrant, 
-                                        shipsAtTarget >>
+                                        shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlWaitWaterHigh == /\ pc[0] = "ControlWaitWaterHigh"
                         /\ waterLevel[req.lock] = "high"
@@ -1028,7 +1057,7 @@ ControlWaitWaterHigh == /\ pc[0] = "ControlWaitWaterHigh"
                                         moved, perm, req, targetWaterLevel, 
                                         requestedSide, oppositeSide, 
                                         targetLocation, canGrant, 
-                                        shipsAtTarget >>
+                                        shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlWaitCloseValveHigh == /\ pc[0] = "ControlWaitCloseValveHigh"
                              /\ lockCommand[req.lock].command = "finished"
@@ -1040,7 +1069,7 @@ ControlWaitCloseValveHigh == /\ pc[0] = "ControlWaitCloseValveHigh"
                                              permissions, moved, perm, req, 
                                              targetWaterLevel, requestedSide, 
                                              oppositeSide, targetLocation, 
-                                             canGrant, shipsAtTarget >>
+                                             canGrant, shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlPrepareOpenDoor2 == /\ pc[0] = "ControlPrepareOpenDoor2"
                            /\ TRUE
@@ -1052,7 +1081,7 @@ ControlPrepareOpenDoor2 == /\ pc[0] = "ControlPrepareOpenDoor2"
                                            moved, perm, req, targetWaterLevel, 
                                            requestedSide, oppositeSide, 
                                            targetLocation, canGrant, 
-                                           shipsAtTarget >>
+                                           shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlOpenRequestedDoor == /\ pc[0] = "ControlOpenRequestedDoor"
                             /\ lockCommand' = [lockCommand EXCEPT ![req.lock] = [command |-> "change_door", open |-> TRUE, side |-> requestedSide]]
@@ -1064,7 +1093,7 @@ ControlOpenRequestedDoor == /\ pc[0] = "ControlOpenRequestedDoor"
                                             req, targetWaterLevel, 
                                             requestedSide, oppositeSide, 
                                             targetLocation, canGrant, 
-                                            shipsAtTarget >>
+                                            shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlWaitOpenDoor == /\ pc[0] = "ControlWaitOpenDoor"
                        /\ lockCommand[req.lock].command = "finished"
@@ -1074,7 +1103,7 @@ ControlWaitOpenDoor == /\ pc[0] = "ControlWaitOpenDoor"
                                        lockCommand, requests, permissions, 
                                        moved, perm, req, targetWaterLevel, 
                                        requestedSide, oppositeSide, 
-                                       targetLocation, canGrant, shipsAtTarget >>
+                                       targetLocation, canGrant, shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlGrantPermission == /\ pc[0] = "ControlGrantPermission"
                           /\ permissions' = [permissions EXCEPT ![req.ship] = Append((permissions[req.ship]), ([lock |-> req.lock, granted |-> TRUE]))]
@@ -1085,7 +1114,7 @@ ControlGrantPermission == /\ pc[0] = "ControlGrantPermission"
                                           lockCommand, requests, moved, perm, 
                                           req, targetWaterLevel, requestedSide, 
                                           oppositeSide, targetLocation, 
-                                          canGrant, shipsAtTarget >>
+                                          canGrant, shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlObserveMove == /\ pc[0] = "ControlObserveMove"
                       /\ moved[req.ship]
@@ -1095,7 +1124,7 @@ ControlObserveMove == /\ pc[0] = "ControlObserveMove"
                                       lockCommand, requests, permissions, 
                                       moved, perm, req, targetWaterLevel, 
                                       requestedSide, oppositeSide, 
-                                      targetLocation, canGrant, shipsAtTarget >>
+                                      targetLocation, canGrant, shipsAtTarget, isExitRequest, requeueCount >>
 
 ControlClearMoved == /\ pc[0] = "ControlClearMoved"
                      /\ moved' = [moved EXCEPT ![req.ship] = FALSE]
@@ -1105,7 +1134,7 @@ ControlClearMoved == /\ pc[0] = "ControlClearMoved"
                                      lockCommand, requests, permissions, perm, 
                                      req, targetWaterLevel, requestedSide, 
                                      oppositeSide, targetLocation, canGrant, 
-                                     shipsAtTarget >>
+                                     shipsAtTarget, isExitRequest, requeueCount >>
 
 controlProcess == ControlLoop \/ ControlReadRequest \/ ControlCheckCapacity
                      \/ ControlDecideGrant \/ ControlDenyPermission
@@ -1127,6 +1156,12 @@ Next == controlProcess
            \/ (\E self \in Ships: shipProcess(self))
 
 Spec == Init /\ [][Next]_vars
+
+\* Fairness specification with weak fairness for controller and ships
+FairSpec == Spec 
+            /\ WF_vars(controlProcess)
+            /\ \A l \in Locks: WF_vars(lockProcess(l))
+            /\ \A s \in Ships: WF_vars(shipProcess(s))
 
 \* END TRANSLATION 
 
