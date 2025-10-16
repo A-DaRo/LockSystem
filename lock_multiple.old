@@ -384,9 +384,10 @@ end process;
 end algorithm; *)
 
 
-\* BEGIN TRANSLATION (chksum(pcal) = "180592f8" /\ chksum(tla) = "70dd900c")
+\* BEGIN TRANSLATION (chksum(pcal) = "dc17bab2" /\ chksum(tla) = "273a7d28")
 VARIABLES lockOrientations, doorsOpen, valvesOpen, waterLevel, shipLocations, 
-          shipStates, lockCommand, requests, permissions, moved, pc
+          shipStates, lockCommand, requests, retryQueue, permissions, moved, 
+          pc
 
 (* define statement *)
 InLock(ship) == IsLock(shipLocations[ship])
@@ -413,11 +414,14 @@ TypeOK == /\ \A l \in Locks: /\ lockOrientations[l] \in LockOrientation
                /\ requests[i].ship \in Ships
                /\ requests[i].lock \in Locks
                /\ requests[i].side \in LockSide
+          /\ \A i \in 1..Len(retryQueue):
+               /\ retryQueue[i].ship \in Ships
+               /\ retryQueue[i].lock \in Locks
+               /\ retryQueue[i].side \in LockSide
 
 
-
-
-MessagesOK == /\ Len(requests) <= NumShips * 2
+MessagesOK == /\ Len(requests) <= NumShips
+              /\ Len(retryQueue) <= NumShips
               /\ \A s \in Ships: Len(permissions[s]) <= 1
 
 
@@ -471,8 +475,8 @@ MaxShipsPerLocation ==
 VARIABLES perm, req, ship_id, lock_id, side, target_loc, grant
 
 vars == << lockOrientations, doorsOpen, valvesOpen, waterLevel, shipLocations, 
-           shipStates, lockCommand, requests, permissions, moved, pc, perm, 
-           req, ship_id, lock_id, side, target_loc, grant >>
+           shipStates, lockCommand, requests, retryQueue, permissions, moved, 
+           pc, perm, req, ship_id, lock_id, side, target_loc, grant >>
 
 ProcSet == (Locks) \cup (Ships) \cup {0}
 
@@ -485,6 +489,7 @@ Init == (* Global variables *)
         /\ shipStates = [s \in Ships |-> IF s%2=0 THEN "go_to_east" ELSE "go_to_west"]
         /\ lockCommand = [l \in Locks |-> [command |-> "finished", open |-> FALSE, side |-> "west"]]
         /\ requests = << >>
+        /\ retryQueue = << >>
         /\ permissions = [s \in Ships |-> << >>]
         /\ moved = [s \in Ships |-> FALSE]
         (* Process shipProcess *)
@@ -508,15 +513,16 @@ LockWaitForCommand(self) == /\ pc[self] = "LockWaitForCommand"
                                   ELSE /\ IF lockCommand[self].command = "change_valve"
                                              THEN /\ valvesOpen' = [valvesOpen EXCEPT ![self][lockCommand[self].side] = lockCommand[self].open]
                                              ELSE /\ Assert(FALSE, 
-                                                            "Failure of assertion at line 177, column 9.")
+                                                            "Failure of assertion at line 182, column 9.")
                                                   /\ UNCHANGED valvesOpen
                                        /\ UNCHANGED doorsOpen
                             /\ pc' = [pc EXCEPT ![self] = "LockUpdateWaterLevel"]
                             /\ UNCHANGED << lockOrientations, waterLevel, 
                                             shipLocations, shipStates, 
-                                            lockCommand, requests, permissions, 
-                                            moved, perm, req, ship_id, lock_id, 
-                                            side, target_loc, grant >>
+                                            lockCommand, requests, retryQueue, 
+                                            permissions, moved, perm, req, 
+                                            ship_id, lock_id, side, target_loc, 
+                                            grant >>
 
 LockUpdateWaterLevel(self) == /\ pc[self] = "LockUpdateWaterLevel"
                               /\ IF (valvesOpen[self])["low"]
@@ -535,9 +541,10 @@ LockUpdateWaterLevel(self) == /\ pc[self] = "LockUpdateWaterLevel"
                               /\ UNCHANGED << lockOrientations, doorsOpen, 
                                               valvesOpen, shipLocations, 
                                               shipStates, lockCommand, 
-                                              requests, permissions, moved, 
-                                              perm, req, ship_id, lock_id, 
-                                              side, target_loc, grant >>
+                                              requests, retryQueue, 
+                                              permissions, moved, perm, req, 
+                                              ship_id, lock_id, side, 
+                                              target_loc, grant >>
 
 LockCommandFinished(self) == /\ pc[self] = "LockCommandFinished"
                              /\ lockCommand' = [lockCommand EXCEPT ![self].command = "finished"]
@@ -545,9 +552,9 @@ LockCommandFinished(self) == /\ pc[self] = "LockCommandFinished"
                              /\ UNCHANGED << lockOrientations, doorsOpen, 
                                              valvesOpen, waterLevel, 
                                              shipLocations, shipStates, 
-                                             requests, permissions, moved, 
-                                             perm, req, ship_id, lock_id, side, 
-                                             target_loc, grant >>
+                                             requests, retryQueue, permissions, 
+                                             moved, perm, req, ship_id, 
+                                             lock_id, side, target_loc, grant >>
 
 lockProcess(self) == LockWaitForCommand(self) \/ LockUpdateWaterLevel(self)
                         \/ LockCommandFinished(self)
@@ -566,14 +573,15 @@ ShipNextIteration(self) == /\ pc[self] = "ShipNextIteration"
                                                                   THEN /\ pc' = [pc EXCEPT ![self] = "ShipRequestEast"]
                                                                   ELSE /\ pc' = [pc EXCEPT ![self] = "ShipRequestWestInLock"]
                                             ELSE /\ Assert(shipStates[self] = "goal_reached", 
-                                                           "Failure of assertion at line 259, column 9.")
+                                                           "Failure of assertion at line 264, column 9.")
                                                  /\ pc' = [pc EXCEPT ![self] = "ShipTurnAround"]
                            /\ UNCHANGED << lockOrientations, doorsOpen, 
                                            valvesOpen, waterLevel, 
                                            shipLocations, shipStates, 
-                                           lockCommand, requests, permissions, 
-                                           moved, perm, req, ship_id, lock_id, 
-                                           side, target_loc, grant >>
+                                           lockCommand, requests, retryQueue, 
+                                           permissions, moved, perm, req, 
+                                           ship_id, lock_id, side, target_loc, 
+                                           grant >>
 
 ShipGoalReachedEast(self) == /\ pc[self] = "ShipGoalReachedEast"
                              /\ shipStates' = [shipStates EXCEPT ![self] = "goal_reached"]
@@ -581,14 +589,14 @@ ShipGoalReachedEast(self) == /\ pc[self] = "ShipGoalReachedEast"
                              /\ UNCHANGED << lockOrientations, doorsOpen, 
                                              valvesOpen, waterLevel, 
                                              shipLocations, lockCommand, 
-                                             requests, permissions, moved, 
-                                             perm, req, ship_id, lock_id, side, 
-                                             target_loc, grant >>
+                                             requests, retryQueue, permissions, 
+                                             moved, perm, req, ship_id, 
+                                             lock_id, side, target_loc, grant >>
 
 ShipMoveEast(self) == /\ pc[self] = "ShipMoveEast"
                       /\ IF perm[self].granted
                             THEN /\ Assert(doorsOpen[perm[self].lock][IF InLock(self) THEN "east" ELSE "west"], 
-                                           "Failure of assertion at line 221, column 13.")
+                                           "Failure of assertion at line 226, column 13.")
                                  /\ shipLocations' = [shipLocations EXCEPT ![self] = shipLocations[self] + 1]
                                  /\ moved' = [moved EXCEPT ![self] = TRUE]
                             ELSE /\ TRUE
@@ -596,8 +604,8 @@ ShipMoveEast(self) == /\ pc[self] = "ShipMoveEast"
                       /\ pc' = [pc EXCEPT ![self] = "ShipNextIteration"]
                       /\ UNCHANGED << lockOrientations, doorsOpen, valvesOpen, 
                                       waterLevel, shipStates, lockCommand, 
-                                      requests, permissions, perm, req, 
-                                      ship_id, lock_id, side, target_loc, 
+                                      requests, retryQueue, permissions, perm, 
+                                      req, ship_id, lock_id, side, target_loc, 
                                       grant >>
 
 ShipRequestWest(self) == /\ pc[self] = "ShipRequestWest"
@@ -605,22 +613,23 @@ ShipRequestWest(self) == /\ pc[self] = "ShipRequestWest"
                          /\ pc' = [pc EXCEPT ![self] = "ShipWaitForWest"]
                          /\ UNCHANGED << lockOrientations, doorsOpen, 
                                          valvesOpen, waterLevel, shipLocations, 
-                                         shipStates, lockCommand, permissions, 
-                                         moved, perm, req, ship_id, lock_id, 
-                                         side, target_loc, grant >>
+                                         shipStates, lockCommand, retryQueue, 
+                                         permissions, moved, perm, req, 
+                                         ship_id, lock_id, side, target_loc, 
+                                         grant >>
 
 ShipWaitForWest(self) == /\ pc[self] = "ShipWaitForWest"
                          /\ (permissions[self]) /= <<>>
                          /\ perm' = [perm EXCEPT ![self] = Head((permissions[self]))]
                          /\ permissions' = [permissions EXCEPT ![self] = Tail((permissions[self]))]
                          /\ Assert(perm'[self].lock = GetLock(shipLocations[self]+1), 
-                                   "Failure of assertion at line 208, column 13.")
+                                   "Failure of assertion at line 213, column 13.")
                          /\ pc' = [pc EXCEPT ![self] = "ShipMoveEast"]
                          /\ UNCHANGED << lockOrientations, doorsOpen, 
                                          valvesOpen, waterLevel, shipLocations, 
                                          shipStates, lockCommand, requests, 
-                                         moved, req, ship_id, lock_id, side, 
-                                         target_loc, grant >>
+                                         retryQueue, moved, req, ship_id, 
+                                         lock_id, side, target_loc, grant >>
 
 ShipRequestEastInLock(self) == /\ pc[self] = "ShipRequestEastInLock"
                                /\ requests' = Append(requests, ([ship |-> self, lock |-> GetLock(shipLocations[self]), side |-> "east"]))
@@ -628,32 +637,34 @@ ShipRequestEastInLock(self) == /\ pc[self] = "ShipRequestEastInLock"
                                /\ UNCHANGED << lockOrientations, doorsOpen, 
                                                valvesOpen, waterLevel, 
                                                shipLocations, shipStates, 
-                                               lockCommand, permissions, moved, 
-                                               perm, req, ship_id, lock_id, 
-                                               side, target_loc, grant >>
+                                               lockCommand, retryQueue, 
+                                               permissions, moved, perm, req, 
+                                               ship_id, lock_id, side, 
+                                               target_loc, grant >>
 
 ShipWaitForEastInLock(self) == /\ pc[self] = "ShipWaitForEastInLock"
                                /\ (permissions[self]) /= <<>>
                                /\ perm' = [perm EXCEPT ![self] = Head((permissions[self]))]
                                /\ permissions' = [permissions EXCEPT ![self] = Tail((permissions[self]))]
                                /\ Assert(perm'[self].lock = GetLock(shipLocations[self]), 
-                                         "Failure of assertion at line 216, column 13.")
+                                         "Failure of assertion at line 221, column 13.")
                                /\ pc' = [pc EXCEPT ![self] = "ShipMoveEast"]
                                /\ UNCHANGED << lockOrientations, doorsOpen, 
                                                valvesOpen, waterLevel, 
                                                shipLocations, shipStates, 
-                                               lockCommand, requests, moved, 
-                                               req, ship_id, lock_id, side, 
-                                               target_loc, grant >>
+                                               lockCommand, requests, 
+                                               retryQueue, moved, req, ship_id, 
+                                               lock_id, side, target_loc, 
+                                               grant >>
 
 ShipTurnAround(self) == /\ pc[self] = "ShipTurnAround"
                         /\ shipStates' = [shipStates EXCEPT ![self] = IF shipLocations[self] = WestEnd THEN "go_to_east" ELSE "go_to_west"]
                         /\ pc' = [pc EXCEPT ![self] = "ShipNextIteration"]
                         /\ UNCHANGED << lockOrientations, doorsOpen, 
                                         valvesOpen, waterLevel, shipLocations, 
-                                        lockCommand, requests, permissions, 
-                                        moved, perm, req, ship_id, lock_id, 
-                                        side, target_loc, grant >>
+                                        lockCommand, requests, retryQueue, 
+                                        permissions, moved, perm, req, ship_id, 
+                                        lock_id, side, target_loc, grant >>
 
 ShipGoalReachedWest(self) == /\ pc[self] = "ShipGoalReachedWest"
                              /\ shipStates' = [shipStates EXCEPT ![self] = "goal_reached"]
@@ -661,14 +672,14 @@ ShipGoalReachedWest(self) == /\ pc[self] = "ShipGoalReachedWest"
                              /\ UNCHANGED << lockOrientations, doorsOpen, 
                                              valvesOpen, waterLevel, 
                                              shipLocations, lockCommand, 
-                                             requests, permissions, moved, 
-                                             perm, req, ship_id, lock_id, side, 
-                                             target_loc, grant >>
+                                             requests, retryQueue, permissions, 
+                                             moved, perm, req, ship_id, 
+                                             lock_id, side, target_loc, grant >>
 
 ShipMoveWest(self) == /\ pc[self] = "ShipMoveWest"
                       /\ IF perm[self].granted
                             THEN /\ Assert(doorsOpen[perm[self].lock][IF InLock(self) THEN "west" ELSE "east"], 
-                                           "Failure of assertion at line 252, column 13.")
+                                           "Failure of assertion at line 257, column 13.")
                                  /\ shipLocations' = [shipLocations EXCEPT ![self] = shipLocations[self] - 1]
                                  /\ moved' = [moved EXCEPT ![self] = TRUE]
                             ELSE /\ TRUE
@@ -676,8 +687,8 @@ ShipMoveWest(self) == /\ pc[self] = "ShipMoveWest"
                       /\ pc' = [pc EXCEPT ![self] = "ShipNextIteration"]
                       /\ UNCHANGED << lockOrientations, doorsOpen, valvesOpen, 
                                       waterLevel, shipStates, lockCommand, 
-                                      requests, permissions, perm, req, 
-                                      ship_id, lock_id, side, target_loc, 
+                                      requests, retryQueue, permissions, perm, 
+                                      req, ship_id, lock_id, side, target_loc, 
                                       grant >>
 
 ShipRequestEast(self) == /\ pc[self] = "ShipRequestEast"
@@ -685,22 +696,23 @@ ShipRequestEast(self) == /\ pc[self] = "ShipRequestEast"
                          /\ pc' = [pc EXCEPT ![self] = "ShipWaitForEast"]
                          /\ UNCHANGED << lockOrientations, doorsOpen, 
                                          valvesOpen, waterLevel, shipLocations, 
-                                         shipStates, lockCommand, permissions, 
-                                         moved, perm, req, ship_id, lock_id, 
-                                         side, target_loc, grant >>
+                                         shipStates, lockCommand, retryQueue, 
+                                         permissions, moved, perm, req, 
+                                         ship_id, lock_id, side, target_loc, 
+                                         grant >>
 
 ShipWaitForEast(self) == /\ pc[self] = "ShipWaitForEast"
                          /\ (permissions[self]) /= <<>>
                          /\ perm' = [perm EXCEPT ![self] = Head((permissions[self]))]
                          /\ permissions' = [permissions EXCEPT ![self] = Tail((permissions[self]))]
                          /\ Assert(perm'[self].lock = GetLock(shipLocations[self]-1), 
-                                   "Failure of assertion at line 239, column 13.")
+                                   "Failure of assertion at line 244, column 13.")
                          /\ pc' = [pc EXCEPT ![self] = "ShipMoveWest"]
                          /\ UNCHANGED << lockOrientations, doorsOpen, 
                                          valvesOpen, waterLevel, shipLocations, 
                                          shipStates, lockCommand, requests, 
-                                         moved, req, ship_id, lock_id, side, 
-                                         target_loc, grant >>
+                                         retryQueue, moved, req, ship_id, 
+                                         lock_id, side, target_loc, grant >>
 
 ShipRequestWestInLock(self) == /\ pc[self] = "ShipRequestWestInLock"
                                /\ requests' = Append(requests, ([ship |-> self, lock |-> GetLock(shipLocations[self]), side |-> "west"]))
@@ -708,23 +720,25 @@ ShipRequestWestInLock(self) == /\ pc[self] = "ShipRequestWestInLock"
                                /\ UNCHANGED << lockOrientations, doorsOpen, 
                                                valvesOpen, waterLevel, 
                                                shipLocations, shipStates, 
-                                               lockCommand, permissions, moved, 
-                                               perm, req, ship_id, lock_id, 
-                                               side, target_loc, grant >>
+                                               lockCommand, retryQueue, 
+                                               permissions, moved, perm, req, 
+                                               ship_id, lock_id, side, 
+                                               target_loc, grant >>
 
 ShipWaitForWestInLock(self) == /\ pc[self] = "ShipWaitForWestInLock"
                                /\ (permissions[self]) /= <<>>
                                /\ perm' = [perm EXCEPT ![self] = Head((permissions[self]))]
                                /\ permissions' = [permissions EXCEPT ![self] = Tail((permissions[self]))]
                                /\ Assert(perm'[self].lock = GetLock(shipLocations[self]), 
-                                         "Failure of assertion at line 247, column 13.")
+                                         "Failure of assertion at line 252, column 13.")
                                /\ pc' = [pc EXCEPT ![self] = "ShipMoveWest"]
                                /\ UNCHANGED << lockOrientations, doorsOpen, 
                                                valvesOpen, waterLevel, 
                                                shipLocations, shipStates, 
-                                               lockCommand, requests, moved, 
-                                               req, ship_id, lock_id, side, 
-                                               target_loc, grant >>
+                                               lockCommand, requests, 
+                                               retryQueue, moved, req, ship_id, 
+                                               lock_id, side, target_loc, 
+                                               grant >>
 
 shipProcess(self) == ShipNextIteration(self) \/ ShipGoalReachedEast(self)
                         \/ ShipMoveEast(self) \/ ShipRequestWest(self)
@@ -738,12 +752,17 @@ shipProcess(self) == ShipNextIteration(self) \/ ShipGoalReachedEast(self)
                         \/ ShipWaitForWestInLock(self)
 
 ControlNextRequest == /\ pc[0] = "ControlNextRequest"
+                      /\ IF requests = <<>> /\ retryQueue /= <<>>
+                            THEN /\ requests' = retryQueue
+                                 /\ retryQueue' = <<>>
+                            ELSE /\ TRUE
+                                 /\ UNCHANGED << requests, retryQueue >>
                       /\ pc' = [pc EXCEPT ![0] = "ControlReadRequest"]
                       /\ UNCHANGED << lockOrientations, doorsOpen, valvesOpen, 
                                       waterLevel, shipLocations, shipStates, 
-                                      lockCommand, requests, permissions, 
-                                      moved, perm, req, ship_id, lock_id, side, 
-                                      target_loc, grant >>
+                                      lockCommand, permissions, moved, perm, 
+                                      req, ship_id, lock_id, side, target_loc, 
+                                      grant >>
 
 ControlReadRequest == /\ pc[0] = "ControlReadRequest"
                       /\ requests /= <<>>
@@ -755,8 +774,8 @@ ControlReadRequest == /\ pc[0] = "ControlReadRequest"
                       /\ pc' = [pc EXCEPT ![0] = "ControlCheckConditions"]
                       /\ UNCHANGED << lockOrientations, doorsOpen, valvesOpen, 
                                       waterLevel, shipLocations, shipStates, 
-                                      lockCommand, permissions, moved, perm, 
-                                      target_loc, grant >>
+                                      lockCommand, retryQueue, permissions, 
+                                      moved, perm, target_loc, grant >>
 
 ControlCheckConditions == /\ pc[0] = "ControlCheckConditions"
                           /\ target_loc' = (IF shipStates[ship_id] = "go_to_east"
@@ -766,9 +785,9 @@ ControlCheckConditions == /\ pc[0] = "ControlCheckConditions"
                           /\ UNCHANGED << lockOrientations, doorsOpen, 
                                           valvesOpen, waterLevel, 
                                           shipLocations, shipStates, 
-                                          lockCommand, requests, permissions, 
-                                          moved, perm, req, ship_id, lock_id, 
-                                          side, grant >>
+                                          lockCommand, requests, retryQueue, 
+                                          permissions, moved, perm, req, 
+                                          ship_id, lock_id, side, grant >>
 
 ControlCheckCapacity == /\ pc[0] = "ControlCheckCapacity"
                         /\ IF ((IsLock(shipLocations[ship_id]) /\ GetLock(shipLocations[ship_id]) = lock_id)
@@ -782,21 +801,23 @@ ControlCheckCapacity == /\ pc[0] = "ControlCheckCapacity"
                         /\ UNCHANGED << lockOrientations, doorsOpen, 
                                         valvesOpen, waterLevel, shipLocations, 
                                         shipStates, lockCommand, requests, 
-                                        permissions, moved, perm, req, ship_id, 
-                                        lock_id, side, target_loc >>
+                                        retryQueue, permissions, moved, perm, 
+                                        req, ship_id, lock_id, side, 
+                                        target_loc >>
 
 ControlDecideGrantOrRetry == /\ pc[0] = "ControlDecideGrantOrRetry"
                              /\ IF grant
                                    THEN /\ TRUE
                                         /\ pc' = [pc EXCEPT ![0] = "ControlCloseBothDoors"]
-                                        /\ UNCHANGED requests
-                                   ELSE /\ requests' = Append(requests, req)
+                                        /\ UNCHANGED retryQueue
+                                   ELSE /\ retryQueue' = Append(retryQueue, req)
                                         /\ pc' = [pc EXCEPT ![0] = "ControlNextRequest"]
                              /\ UNCHANGED << lockOrientations, doorsOpen, 
                                              valvesOpen, waterLevel, 
                                              shipLocations, shipStates, 
-                                             lockCommand, permissions, moved, 
-                                             perm, req, ship_id, lock_id, side, 
+                                             lockCommand, requests, 
+                                             permissions, moved, perm, req, 
+                                             ship_id, lock_id, side, 
                                              target_loc, grant >>
 
 ControlCloseBothDoors == /\ pc[0] = "ControlCloseBothDoors"
@@ -805,9 +826,10 @@ ControlCloseBothDoors == /\ pc[0] = "ControlCloseBothDoors"
                          /\ pc' = [pc EXCEPT ![0] = "ControlWaitLowDoorClosed"]
                          /\ UNCHANGED << lockOrientations, doorsOpen, 
                                          valvesOpen, waterLevel, shipLocations, 
-                                         shipStates, requests, permissions, 
-                                         moved, perm, req, ship_id, lock_id, 
-                                         side, target_loc, grant >>
+                                         shipStates, requests, retryQueue, 
+                                         permissions, moved, perm, req, 
+                                         ship_id, lock_id, side, target_loc, 
+                                         grant >>
 
 ControlWaitLowDoorClosed == /\ pc[0] = "ControlWaitLowDoorClosed"
                             /\ lockCommand[lock_id].command = "finished"
@@ -816,9 +838,9 @@ ControlWaitLowDoorClosed == /\ pc[0] = "ControlWaitLowDoorClosed"
                             /\ UNCHANGED << lockOrientations, doorsOpen, 
                                             valvesOpen, waterLevel, 
                                             shipLocations, shipStates, 
-                                            requests, permissions, moved, perm, 
-                                            req, ship_id, lock_id, side, 
-                                            target_loc, grant >>
+                                            requests, retryQueue, permissions, 
+                                            moved, perm, req, ship_id, lock_id, 
+                                            side, target_loc, grant >>
 
 ControlWaitHighDoorClosed == /\ pc[0] = "ControlWaitHighDoorClosed"
                              /\ lockCommand[lock_id].command = "finished"
@@ -826,7 +848,7 @@ ControlWaitHighDoorClosed == /\ pc[0] = "ControlWaitHighDoorClosed"
                              /\ UNCHANGED << lockOrientations, doorsOpen, 
                                              valvesOpen, waterLevel, 
                                              shipLocations, shipStates, 
-                                             lockCommand, requests, 
+                                             lockCommand, requests, retryQueue, 
                                              permissions, moved, perm, req, 
                                              ship_id, lock_id, side, 
                                              target_loc, grant >>
@@ -841,9 +863,9 @@ ControlAdjustWaterLevel == /\ pc[0] = "ControlAdjustWaterLevel"
                            /\ UNCHANGED << lockOrientations, doorsOpen, 
                                            valvesOpen, waterLevel, 
                                            shipLocations, shipStates, requests, 
-                                           permissions, moved, perm, req, 
-                                           ship_id, lock_id, side, target_loc, 
-                                           grant >>
+                                           retryQueue, permissions, moved, 
+                                           perm, req, ship_id, lock_id, side, 
+                                           target_loc, grant >>
 
 ControlWaitOppositeValveClosed == /\ pc[0] = "ControlWaitOppositeValveClosed"
                                   /\ lockCommand[lock_id].command = "finished"
@@ -853,9 +875,10 @@ ControlWaitOppositeValveClosed == /\ pc[0] = "ControlWaitOppositeValveClosed"
                                   /\ UNCHANGED << lockOrientations, doorsOpen, 
                                                   valvesOpen, waterLevel, 
                                                   shipLocations, shipStates, 
-                                                  requests, permissions, moved, 
-                                                  perm, req, ship_id, lock_id, 
-                                                  side, target_loc, grant >>
+                                                  requests, retryQueue, 
+                                                  permissions, moved, perm, 
+                                                  req, ship_id, lock_id, side, 
+                                                  target_loc, grant >>
 
 ControlWaitValveOpen == /\ pc[0] = "ControlWaitValveOpen"
                         /\ lockCommand[lock_id].command = "finished"
@@ -863,8 +886,9 @@ ControlWaitValveOpen == /\ pc[0] = "ControlWaitValveOpen"
                         /\ UNCHANGED << lockOrientations, doorsOpen, 
                                         valvesOpen, waterLevel, shipLocations, 
                                         shipStates, lockCommand, requests, 
-                                        permissions, moved, perm, req, ship_id, 
-                                        lock_id, side, target_loc, grant >>
+                                        retryQueue, permissions, moved, perm, 
+                                        req, ship_id, lock_id, side, 
+                                        target_loc, grant >>
 
 ControlWaitWaterLevel == /\ pc[0] = "ControlWaitWaterLevel"
                          /\ waterLevel[lock_id] = (IF side = LowSide(lockOrientations[lock_id]) THEN "low" ELSE "high")
@@ -873,9 +897,10 @@ ControlWaitWaterLevel == /\ pc[0] = "ControlWaitWaterLevel"
                          /\ pc' = [pc EXCEPT ![0] = "ControlWaitValveClosed"]
                          /\ UNCHANGED << lockOrientations, doorsOpen, 
                                          valvesOpen, waterLevel, shipLocations, 
-                                         shipStates, requests, permissions, 
-                                         moved, perm, req, ship_id, lock_id, 
-                                         side, target_loc, grant >>
+                                         shipStates, requests, retryQueue, 
+                                         permissions, moved, perm, req, 
+                                         ship_id, lock_id, side, target_loc, 
+                                         grant >>
 
 ControlWaitValveClosed == /\ pc[0] = "ControlWaitValveClosed"
                           /\ lockCommand[lock_id].command = "finished"
@@ -883,9 +908,10 @@ ControlWaitValveClosed == /\ pc[0] = "ControlWaitValveClosed"
                           /\ UNCHANGED << lockOrientations, doorsOpen, 
                                           valvesOpen, waterLevel, 
                                           shipLocations, shipStates, 
-                                          lockCommand, requests, permissions, 
-                                          moved, perm, req, ship_id, lock_id, 
-                                          side, target_loc, grant >>
+                                          lockCommand, requests, retryQueue, 
+                                          permissions, moved, perm, req, 
+                                          ship_id, lock_id, side, target_loc, 
+                                          grant >>
 
 ControlOpenRequestedDoor == /\ pc[0] = "ControlOpenRequestedDoor"
                             /\ lockCommand' = [lockCommand EXCEPT ![lock_id] = [command |-> "change_door", open |-> TRUE, side |-> side]]
@@ -893,18 +919,18 @@ ControlOpenRequestedDoor == /\ pc[0] = "ControlOpenRequestedDoor"
                             /\ UNCHANGED << lockOrientations, doorsOpen, 
                                             valvesOpen, waterLevel, 
                                             shipLocations, shipStates, 
-                                            requests, permissions, moved, perm, 
-                                            req, ship_id, lock_id, side, 
-                                            target_loc, grant >>
+                                            requests, retryQueue, permissions, 
+                                            moved, perm, req, ship_id, lock_id, 
+                                            side, target_loc, grant >>
 
 ControlWaitDoorOpen == /\ pc[0] = "ControlWaitDoorOpen"
                        /\ lockCommand[lock_id].command = "finished"
                        /\ pc' = [pc EXCEPT ![0] = "ControlGrantPermission"]
                        /\ UNCHANGED << lockOrientations, doorsOpen, valvesOpen, 
                                        waterLevel, shipLocations, shipStates, 
-                                       lockCommand, requests, permissions, 
-                                       moved, perm, req, ship_id, lock_id, 
-                                       side, target_loc, grant >>
+                                       lockCommand, requests, retryQueue, 
+                                       permissions, moved, perm, req, ship_id, 
+                                       lock_id, side, target_loc, grant >>
 
 ControlGrantPermission == /\ pc[0] = "ControlGrantPermission"
                           /\ permissions' = [permissions EXCEPT ![ship_id] = Append((permissions[ship_id]), ([lock |-> lock_id, granted |-> TRUE]))]
@@ -912,9 +938,9 @@ ControlGrantPermission == /\ pc[0] = "ControlGrantPermission"
                           /\ UNCHANGED << lockOrientations, doorsOpen, 
                                           valvesOpen, waterLevel, 
                                           shipLocations, shipStates, 
-                                          lockCommand, requests, moved, perm, 
-                                          req, ship_id, lock_id, side, 
-                                          target_loc, grant >>
+                                          lockCommand, requests, retryQueue, 
+                                          moved, perm, req, ship_id, lock_id, 
+                                          side, target_loc, grant >>
 
 ControlWaitForShipMovement == /\ pc[0] = "ControlWaitForShipMovement"
                               /\ moved[ship_id]
@@ -924,9 +950,9 @@ ControlWaitForShipMovement == /\ pc[0] = "ControlWaitForShipMovement"
                               /\ UNCHANGED << lockOrientations, doorsOpen, 
                                               valvesOpen, waterLevel, 
                                               shipLocations, shipStates, 
-                                              requests, permissions, perm, req, 
-                                              ship_id, lock_id, side, 
-                                              target_loc, grant >>
+                                              requests, retryQueue, 
+                                              permissions, perm, req, ship_id, 
+                                              lock_id, side, target_loc, grant >>
 
 ControlWaitDoorClosed == /\ pc[0] = "ControlWaitDoorClosed"
                          /\ lockCommand[lock_id].command = "finished"
@@ -934,9 +960,9 @@ ControlWaitDoorClosed == /\ pc[0] = "ControlWaitDoorClosed"
                          /\ UNCHANGED << lockOrientations, doorsOpen, 
                                          valvesOpen, waterLevel, shipLocations, 
                                          shipStates, lockCommand, requests, 
-                                         permissions, moved, perm, req, 
-                                         ship_id, lock_id, side, target_loc, 
-                                         grant >>
+                                         retryQueue, permissions, moved, perm, 
+                                         req, ship_id, lock_id, side, 
+                                         target_loc, grant >>
 
 controlProcess == ControlNextRequest \/ ControlReadRequest
                      \/ ControlCheckConditions \/ ControlCheckCapacity
