@@ -9,11 +9,11 @@
 
 ## Executive Summary
 
-✅ **All properties verified successfully**  
-✅ **Model is deadlock-free**  
-✅ **Works for both lock orientations** (west_low and east_low)  
-✅ **Verification time:** < 1 second  
-✅ **State space:** 154 distinct states (west_low), 164 distinct states (east_low)
+**All properties verified successfully**  
+**Model is deadlock-free**  
+**Works for both lock orientations** (west_low and east_low)  
+**Verification time:** < 1 second  
+**State space:** 154 distinct states (west_low), 164 distinct states (east_low)
 
 ---
 
@@ -53,13 +53,13 @@ The implementation ensures safety by:
 
 ### Safety Properties (Invariants)
 
-#### 1. **TypeOK** ✅ PASS
+#### 1. **TypeOK** PASS
 All variables maintain correct types throughout execution.
 
-#### 2. **MessagesOK** ✅ PASS
+#### 2. **MessagesOK** PASS
 Message queues do not overflow (max 1 message at a time for single ship/lock model).
 
-#### 3. **DoorsMutex** ✅ PASS
+#### 3. **DoorsMutex** PASS
 ```tla
 DoorsMutex == ~(doorsOpen["west"] /\ doorsOpen["east"])
 ```
@@ -67,7 +67,7 @@ The eastern and western pairs of doors are never simultaneously open.
 - **Type:** Safety property (invariant)
 - **Justification:** This is a safety property because it specifies "something bad never happens" - specifically, both doors never open at the same time, which would cause water to flow uncontrolled through the lock.
 
-#### 4. **DoorsOpenValvesClosed** ✅ PASS
+#### 4. **DoorsOpenValvesClosed** PASS
 ```tla
 DoorsOpenValvesClosed == 
   /\ (doorsOpen[LowSide(lockOrientation)] => ~valvesOpen["high"])
@@ -77,7 +77,7 @@ When the lower pair of doors is open, the higher valve is closed, and vice versa
 - **Type:** Safety property (invariant)
 - **Justification:** This is a safety property because it prevents an unsafe condition where water could flow uncontrolled if doors and opposite valves are open simultaneously.
 
-#### 5. **DoorsOpenWaterlevelRight** ✅ PASS
+#### 5. **DoorsOpenWaterlevelRight** PASS
 ```tla
 DoorsOpenWaterlevelRight == 
   /\ (doorsOpen[LowSide(lockOrientation)] => waterLevel = "low")
@@ -91,7 +91,7 @@ The lower pair of doors is only open when water level is low; the higher pair on
 
 All liveness properties require **weak fairness (WF)** to hold. Without fairness assumptions, processes could be indefinitely delayed, preventing progress.
 
-#### 6. **RequestLockFulfilled** ✅ PASS (WF)
+#### 6. **RequestLockFulfilled** PASS (WF)
 ```tla
 RequestLockFulfilled == \A s \in Ships : (shipLocation = 0 ~> InLock)
 ```
@@ -100,7 +100,7 @@ Always, if the ship requests to enter the lock (from position 0), it will eventu
 - **Fairness Required:** Weak Fairness (WF)
 - **Justification:** This is a liveness property because it specifies "something good eventually happens" - a ship that requests lock entry will eventually get inside. WF is needed to ensure the control process eventually processes the request, the lock process eventually executes commands, and the ship process eventually moves.
 
-#### 7. **WaterlevelChange** ✅ PASS (WF)
+#### 7. **WaterlevelChange** PASS (WF)
 ```tla
 WaterlevelChange == 
   /\ []<>(waterLevel = "high")
@@ -111,7 +111,7 @@ The water level is infinitely many times high and infinitely many times low.
 - **Fairness Required:** Weak Fairness (WF)
 - **Justification:** This liveness property ensures the system doesn't get stuck at one water level. Without WF on the lock and control processes, the water level could remain constant forever. WF ensures valves are eventually operated to change the water level.
 
-#### 8. **RequestsShips** ✅ PASS (WF)
+#### 8. **RequestsShips** PASS (WF)
 ```tla
 RequestsShips == []<>(Len(requests) > 0)
 ```
@@ -120,7 +120,7 @@ Infinitely many times the ship makes requests.
 - **Fairness Required:** Weak Fairness (WF)
 - **Justification:** This liveness property ensures the ship continues to operate infinitely. Without WF on the ship process, it could stop making requests. WF ensures the ship process is always eventually scheduled.
 
-#### 9. **ShipsReachGoals** ✅ PASS (WF)
+#### 9. **ShipsReachGoals** PASS (WF)
 ```tla
 ShipsReachGoals == 
   /\ []<>(shipLocation = EastEnd)
@@ -132,7 +132,7 @@ Infinitely many times the ship reaches both the east end and west end.
 - **Justification:** This liveness property ensures the ship makes progress through the system repeatedly. Without WF on all processes (ship, control, lock), the ship could get stuck and never reach its destination. WF ensures all processes make progress, allowing the ship to traverse the lock repeatedly.
 
 ### Deadlock
-✅ **No deadlocks detected**
+**No deadlocks detected**
 
 The model is completely deadlock-free. All processes can always make progress under the fairness assumptions.
 
@@ -140,16 +140,16 @@ The model is completely deadlock-free. All processes can always make progress un
 
 | Property | Type | Result | Fairness | Configuration Section |
 |----------|------|--------|----------|----------------------|
-| **Deadlock Check** | System | ✅ PASS | - | CHECK_DEADLOCK |
-| **TypeOK** | Safety (Invariant) | ✅ PASS | None | INVARIANT |
-| **MessagesOK** | Safety (Invariant) | ✅ PASS | None | INVARIANT |
-| **DoorsMutex** | Safety (Invariant) | ✅ PASS | None | INVARIANT |
-| **DoorsOpenValvesClosed** | Safety (Invariant) | ✅ PASS | None | INVARIANT |
-| **DoorsOpenWaterlevelRight** | Safety (Invariant) | ✅ PASS | None | INVARIANT |
-| **RequestLockFulfilled** | Liveness (Temporal) | ✅ PASS | WF | PROPERTY |
-| **WaterlevelChange** | Liveness (Temporal) | ✅ PASS | WF | PROPERTY |
-| **RequestsShips** | Liveness (Temporal) | ✅ PASS | WF | PROPERTY |
-| **ShipsReachGoals** | Liveness (Temporal) | ✅ PASS | WF | PROPERTY |
+| **Deadlock Check** | System | PASS | - | CHECK_DEADLOCK |
+| **TypeOK** | Safety (Invariant) | PASS | None | INVARIANT |
+| **MessagesOK** | Safety (Invariant) | PASS | None | INVARIANT |
+| **DoorsMutex** | Safety (Invariant) | PASS | None | INVARIANT |
+| **DoorsOpenValvesClosed** | Safety (Invariant) | PASS | None | INVARIANT |
+| **DoorsOpenWaterlevelRight** | Safety (Invariant) | PASS | None | INVARIANT |
+| **RequestLockFulfilled** | Liveness (Temporal) | PASS | WF | PROPERTY |
+| **WaterlevelChange** | Liveness (Temporal) | PASS | WF | PROPERTY |
+| **RequestsShips** | Liveness (Temporal) | PASS | WF | PROPERTY |
+| **ShipsReachGoals** | Liveness (Temporal) | PASS | WF | PROPERTY |
 
 **Legend:**
 - WF = Weak Fairness required
@@ -244,7 +244,7 @@ FairSpec == Spec
 - **Distinct States Found:** 164
 - **State Space Depth:** 138
 - **Verification Time:** < 1 second
-- **Result:** ✅ All properties PASS
+- **Result:** All properties PASS
 
 ### Performance Characteristics
 - **Search Algorithm:** Breadth-first search (BFS)
@@ -262,13 +262,13 @@ As required in Section 4.2, the model must work for **both lock orientations**. 
 1. **`"west_low"`** (default configuration)
    - West side has low water level, connected to low-altitude water body
    - East side has high water level, connected to high-altitude water body
-   - ✅ All 10 properties PASS
+   - All 10 properties PASS
    - 154 distinct states explored
 
 2. **`"east_low"`** (alternate configuration tested)
    - East side has low water level, connected to low-altitude water body
    - West side has high water level, connected to high-altitude water body
-   - ✅ All 10 properties PASS
+   - All 10 properties PASS
    - 164 distinct states explored
 
 ### Implementation Approach: Helper Functions
@@ -333,10 +333,10 @@ This confirms the model is truly orientation-agnostic and satisfies the requirem
 ## Conclusion
 
 The single lock model with the implemented control process successfully satisfies all specified properties:
-- ✅ All safety invariants hold
-- ✅ All liveness properties hold under weak fairness
-- ✅ No deadlocks exist
-- ✅ System works for both lock orientations
-- ✅ Verification completes in under 1 second
+- All safety invariants hold
+- All liveness properties hold under weak fairness
+- No deadlocks exist
+- System works for both lock orientations
+- Verification completes in under 1 second
 
 The control process correctly and safely manages lock operations, ensuring ships can traverse the lock while maintaining all safety constraints.
