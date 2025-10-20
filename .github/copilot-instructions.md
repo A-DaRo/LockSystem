@@ -7,7 +7,6 @@ This project models a Panama-style lock system in PlusCal/TLA+. Use `assignment_
 - `lock_single.tla`: single-lock model with `lockProcess`, `shipProcess`, and a placeholder `controlProcess = 0`.
 - `lock_multiple.tla`: multi-lock/ship version using arrays/maps per lock/ship; adds `moved[s]` and per-ship `permissions[s]`.
 - `lock_system.tla`: toggle the active model by EXTENDS `lock_single` or `lock_multiple`.
-- `lock_system.toolbox/*`: TLC configs (`model_single/MC.cfg`, `model_multiple/MC.cfg`).
 
 ## Task 1 — Single lock controller + verification
 1) In `lock_single.tla`, implement `controlProcess`:

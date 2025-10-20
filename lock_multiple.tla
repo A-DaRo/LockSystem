@@ -277,24 +277,23 @@ variables
 begin
   ControlNextRequest:
   while TRUE do
-    \* Option 4: Simple FIFO with immediate retry
     \* No separate retry queue - denied requests go to back of main queue
     \* This allows other requests (especially exits) to proceed
     \* A request may be denied multiple times before succeeding
   ControlReadRequest:
-    \* Step 1: Read the next request from main queue
+    \* Read the next request from main queue
     read(requests, req);
     ship_id := req.ship;
     lock_id := req.lock;
     side := req.side;
 
   ControlCheckConditions:
-    \* Step 2: Determine target location
+    \* Determine target location
     target_loc := IF shipStates[ship_id] = "go_to_east"
                   THEN shipLocations[ship_id] + 1
                   ELSE shipLocations[ship_id] - 1;
     
-    \* Step 3: Check if capacity allows and no other ship is using this lock
+    \* Check if capacity allows and no other ship is using this lock
     \* If ship is inside the lock (exiting), always proceed
     \* If capacity is full and ship is trying to enter, deny and retry
   ControlCheckCapacity:
