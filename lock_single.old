@@ -2,7 +2,6 @@
 
 EXTENDS lock_data
 
-
 (* --algorithm lock_system
 
 \*****************************

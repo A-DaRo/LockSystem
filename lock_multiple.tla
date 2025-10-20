@@ -2,7 +2,6 @@
 
 EXTENDS lock_data
 
-
 (* --algorithm lock_system
 
 \*****************************
@@ -380,9 +379,7 @@ begin
   end while;
 end process;
 
-
 end algorithm; *)
-
 
 \* BEGIN TRANSLATION (chksum(pcal) = "180592f8" /\ chksum(tla) = "70dd900c")
 VARIABLES lockOrientations, doorsOpen, valvesOpen, waterLevel, shipLocations, 
@@ -390,9 +387,6 @@ VARIABLES lockOrientations, doorsOpen, valvesOpen, waterLevel, shipLocations,
 
 (* define statement *)
 InLock(ship) == IsLock(shipLocations[ship])
-
-
-
 
 
 
